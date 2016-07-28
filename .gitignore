@@ -1,0 +1,12 @@
+gyms.json
+geo_gyms.json
+stops.json
+geo_stops.json
+pokes.json
+spawns.json
+config.json
+*.swp
+*.swo
+points.sqlite3
+pokemon.sqlite3
+pgoapi/**/*.pyc

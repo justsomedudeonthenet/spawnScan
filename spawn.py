@@ -4,7 +4,8 @@ import os
 import logging
 import time
 import geojson
-
+import sqlite3
+import shutil
 import threading
 
 from pgoapi import PGoApi
@@ -52,7 +53,10 @@ def doScan(sLat, sLng, api):
 	response_dict = api.call()
 	try:
 		cells = response_dict['responses']['GET_MAP_OBJECTS']['map_cells']
-	except TypeError, KeyError:
+	except TypeError:
+		print ('error getting map data for {}, {}'.format(sLat, sLng))
+		return
+	except KeyError:
 		print ('error getting map data for {}, {}'.format(sLat, sLng))
 		return
 	for cell in cells:
@@ -69,6 +73,8 @@ def doScan(sLat, sLng, api):
 					spawnLog = {'time':secSpawn, 'sid':wild['spawnpoint_id'], 'lat':wild['latitude'], 'lng':wild['longitude'], 'cell':CellId.from_lat_lng(LatLng.from_degrees(wild['latitude'], wild['longitude'])).to_token()}
 					pokes[phash] = pokeLog
 					spawns[shash] = spawnLog
+				else:
+					print "Long spawning pokemon detected - time_till_hidden_ms {}".format(wild['time_till_hidden_ms'])
 		if 'forts' in cell:
 			for fort  in cell['forts']:
 				if fort['enabled'] == True:
@@ -119,37 +125,37 @@ def worker(wid,Tthreads):
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do first pass now sleeping for {}'.format(wid,curTime-startTime,600-(curTime-startTime))
+	print 'worker {} took {} seconds to do first pass now sleeping for {}'.format(wid,curTime-startTime,600-(curTime-startTime))
 	time.sleep(600-(curTime-startTime))
 	print 'worker {} is doing second pass'.format(wid)
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do second pass now sleeping for {}'.format(wid,curTime-startTime,1200-(curTime-startTime))
+	print 'worker {} took {} seconds to do second pass now sleeping for {}'.format(wid,curTime-startTime,1200-(curTime-startTime))
 	time.sleep(1200-(curTime-startTime))
 	print 'worker {} is doing third pass'.format(wid)
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do third  pass now sleeping for {}'.format(wid,curTime-startTime,1800-(curTime-startTime))
+	print 'worker {} took {} seconds to do third  pass now sleeping for {}'.format(wid,curTime-startTime,1800-(curTime-startTime))
 	time.sleep(1800-(curTime-startTime))
-	print 'worker {} is doing forth pass'.format(wid)
+	print 'worker {} is doing fourth pass'.format(wid)
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do fourth pass now sleeping for {}'.format(wid,curTime-startTime,2400-(curTime-startTime))
+	print 'worker {} took {} seconds to do fourth pass now sleeping for {}'.format(wid,curTime-startTime,2400-(curTime-startTime))
 	time.sleep(2400-(curTime-startTime))
-	print 'worker {} is doing fith pass'.format(wid)
+	print 'worker {} is doing fifth pass'.format(wid)
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do fith pass now sleeping for {}'.format(wid,curTime-startTime,3000-(curTime-startTime))
+	print 'worker {} took {} seconds to do fifth pass now sleeping for {}'.format(wid,curTime-startTime,3000-(curTime-startTime))
 	time.sleep(3000-(curTime-startTime))
 	print 'worker {} is doing sixth pass'.format(wid)
 	for i in xrange(workStart,workStop):
 		doScan(scans[i][0], scans[i][1], api)
 	curTime=time.time()
-	print 'worker {} took {} secconds to do sixth pass'.format(wid,curTime-startTime)
+	print 'worker {} took {} seconds to do sixth pass'.format(wid,curTime-startTime)
 
 def main():
 	tscans = genwork()
@@ -220,7 +226,7 @@ def main():
 		point = geojson.Point((location['lng'], location['lat']))
 		feature = geojson.Feature(geometry=point, id=location['id'],properties={"name":location['id']})
 		geopoints.append(feature)
-	features = geojson.FeatureCollection(geostops)
+	features = geojson.FeatureCollection(geopoints)
 	f = open('geo_gyms.json','w')
 	json.dump(features,f)
 	f.close()
@@ -232,10 +238,76 @@ def main():
 		point = geojson.Point((location['lng'], location['lat']))
 		feature = geojson.Feature(geometry=point, id=location['id'],properties={"name":location['id']})
 		geopoints.append(feature)
-	features = geojson.FeatureCollection(geostops)
+	features = geojson.FeatureCollection(geopoints)
 	f = open('geo_stops.json','w')
 	json.dump(features,f)
 	f.close()
+
+# Update databases with newest data
+	print "Updating pokemon spawn database"
+	db = sqlite3.connect("pokemon.sqlite3")
+	c = db.cursor()
+	with open('pokes.json') as file:
+	        items = json.load(file)
+	for item in items:
+	        try:
+	                c.execute("INSERT INTO pokemon (time, lat, lng, pid, cell, sid) VALUES(?,?,?,?,?,?)",[item['time'],item['lat'],item['lng'],item['pid'],item['cell'],item['sid']])
+	        except sqlite3.IntegrityError:
+	                # Ignore errors because of duplicate records
+	                pass
+		except:
+			print "Error occurred inserting into database."
+	db.commit()
+	db.close()
+
+	db = sqlite3.connect("points.sqlite3")
+	c = db.cursor()
+	print "Updating gyms database"
+	with open('gyms.json') as file:
+	        items = json.load(file)
+	for item in items:
+	        try:
+			# If a matching gym already exists, it will get updated with the latest team value
+	                c.execute("INSERT OR REPLACE INTO gyms (id, lat, lng, team) VALUES(?,?,?,?)",[item['id'],item['lat'],item['lng'],item['team']])
+	        except sqlite3.IntegrityError:
+	                # Ignore errors because of duplicate records
+	                pass
+		except:
+			print "Error occurred inserting into database."
+	db.commit()
+	print "Updating pokestops database"
+	with open('stops.json') as file:
+	        items = json.load(file)
+	for item in items:
+	        try:
+	                c.execute("INSERT INTO stops (id, lat, lng) VALUES(?,?,?)",[item['id'],item['lat'],item['lng']])
+	        except sqlite3.IntegrityError:
+	                # Ignore errors because of duplicate records
+	                pass
+		except:
+			print "Error occurred inserting into database."
+	db.commit()
+	print "Updating spawn points database"
+	with open('spawns.json') as file:
+	        items = json.load(file)
+	for item in items:
+	        try:
+			# Allow replacing spawns in case we find a new time
+			c.execute("INSERT OR REPLACE INTO spawnpoints (sid, time, lat, lng, cell) VALUES(?,?,?,?,?)",[item['sid'],item['time'],item['lat'],item['lng'],item['cell']])
+	        except sqlite3.IntegrityError:
+	                # Ignore errors because of duplicate records
+	                pass
+		except:
+			print "Error occurred inserting into database."
+	db.commit()
+	db.close()
+
+
+# Update www folder
+	shutil.copy('geo_stops.json', 'www/geo_stops.json')
+	shutil.copy('geo_gyms.json', 'www/geo_gyms.json')
+	shutil.copy('spawns.json', 'www/spawns.json')
+	
 
 if __name__ == '__main__':
 	main()

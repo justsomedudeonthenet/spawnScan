@@ -1,4 +1,4 @@
-# spawnScan 0.1.0(mostly stable)(now with a fancy map)
+# spawnScan 0.1.2(mostly stable)(now with a fancy map) dev build
 ## A simple and fast spawnPoint finder for pokemon go
 ### Features
 - By performing 6 scans over the course of 1 hour, the spawn locations for a given area can be determined and a live map of active spawns can be made without having to further query the api, lowering server load
@@ -38,3 +38,11 @@ After that run spawn.py and wait for it to complete (should take between 51 and 
 Then enjoy the map of the spawn points
 
 If you would like to help contribute data, please send a ziped copy of the output files [pokes.json,spawns.json,stops.json,gyms.json] via private message, to reddit user TBTerra
+
+# Changelog
+
+Data now gets output to sqlite databases for easier querying.  This is currently used to generate the heatmap for each pokemon, and will be used for spawn/stop/gym locations soon.
+
+HTML/PHP files moved to www directory.  Point your web server's document root to that directory.  This prevents anyone from accessing your config.json file.
+
+Maps must be run from an actual web server with PHP.
